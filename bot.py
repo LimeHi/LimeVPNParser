@@ -30,7 +30,6 @@ from telegram.ext import (
 import config as cfg
 import sources as src
 from pipeline import run_pipeline
-from sources import DEFAULT_SOURCES
 from state import state
 
 logger = logging.getLogger(__name__)
