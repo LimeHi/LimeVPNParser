@@ -1,44 +1,43 @@
 """
-sources.py  –  список источников конфигов.
-Каждый элемент – прямая ссылка на файл с конфигами (base64 или plain-text).
-Список хранится в памяти; Telegram-бот позволяет добавлять/удалять источники на лету.
+sources.py  –  загружает список источников из sources.txt
+
+Формат sources.txt: одна ссылка на строку, строки с # игнорируются.
+Файл можно редактировать прямо на GitHub — при следующем запуске
+парсер подхватит изменения автоматически.
 """
 
-DEFAULT_SOURCES: list[str] = [
-    # ── barry-far / V2ray-Configs ───────────────────────────────────────
-    "https://raw.githubusercontent.com/barry-far/V2ray-Configs/main/Sub1.txt",
-    "https://raw.githubusercontent.com/barry-far/V2ray-Configs/main/Sub2.txt",
-    "https://raw.githubusercontent.com/barry-far/V2ray-Configs/main/Sub3.txt",
-    "https://raw.githubusercontent.com/barry-far/V2ray-Configs/main/Sub4.txt",
+import logging
+import os
 
-    # ── mahdibland / V2RayAggregator ───────────────────────────────────
-    "https://raw.githubusercontent.com/mahdibland/V2RayAggregator/master/sub/splitted/vmess.txt",
-    "https://raw.githubusercontent.com/mahdibland/V2RayAggregator/master/sub/splitted/vless.txt",
-    "https://raw.githubusercontent.com/mahdibland/V2RayAggregator/master/sub/splitted/trojan.txt",
-    "https://raw.githubusercontent.com/mahdibland/V2RayAggregator/master/sub/splitted/shadowsocks.txt",
+logger = logging.getLogger(__name__)
 
-    # ── yebekhe / TelegramV2rayCollector ──────────────────────────────
-    "https://raw.githubusercontent.com/yebekhe/TelegramV2rayCollector/main/sub/base64/mix",
-    "https://raw.githubusercontent.com/yebekhe/TelegramV2rayCollector/main/sub/base64/vmess",
-    "https://raw.githubusercontent.com/yebekhe/TelegramV2rayCollector/main/sub/base64/vless",
-    "https://raw.githubusercontent.com/yebekhe/TelegramV2rayCollector/main/sub/base64/trojan",
+SOURCES_FILE = os.path.join(os.path.dirname(__file__), "sources.txt")
 
-    # ── soroushmirzaei / telegram-configs-collector ────────────────────
-    "https://raw.githubusercontent.com/soroushmirzaei/telegram-configs-collector/main/channels/protocols/vmess",
-    "https://raw.githubusercontent.com/soroushmirzaei/telegram-configs-collector/main/channels/protocols/vless",
-    "https://raw.githubusercontent.com/soroushmirzaei/telegram-configs-collector/main/channels/protocols/trojan",
-    "https://raw.githubusercontent.com/soroushmirzaei/telegram-configs-collector/main/channels/protocols/shadowsocks",
-    "https://raw.githubusercontent.com/soroushmirzaei/telegram-configs-collector/main/channels/protocols/hysteria2",
 
-    # ── mheidari98 / proxy ────────────────────────────────────────────
-    "https://raw.githubusercontent.com/mheidari98/.proxy/main/all",
+def load_sources() -> list[str]:
+    """Читает sources.txt и возвращает список URL."""
+    if not os.path.exists(SOURCES_FILE):
+        logger.warning("sources.txt not found at %s", SOURCES_FILE)
+        return []
+    result = []
+    with open(SOURCES_FILE, "r", encoding="utf-8") as f:
+        for line in f:
+            line = line.strip()
+            if line and not line.startswith("#"):
+                result.append(line)
+    logger.info("Loaded %d sources from sources.txt", len(result))
+    return result
 
-    # ── Pawdroid / Free-servers ───────────────────────────────────────
-    "https://raw.githubusercontent.com/Pawdroid/Free-servers/main/sub",
 
-    # ── ermaozi / get_subscribe ───────────────────────────────────────
-    "https://raw.githubusercontent.com/ermaozi/get_subscribe/main/subscribe/v2ray.txt",
-]
+# Runtime-mutable list (бот может добавлять/удалять на лету)
+sources: list[str] = load_sources()
 
-# Runtime-mutable list (bot can add/remove)
-sources: list[str] = list(DEFAULT_SOURCES)
+
+def save_sources() -> None:
+    """Сохраняет текущий список обратно в sources.txt."""
+    with open(SOURCES_FILE, "w", encoding="utf-8") as f:
+        f.write("# VPN Config Sources\n")
+        f.write("# Одна ссылка на строку. Строки с # игнорируются.\n\n")
+        for url in sources:
+            f.write(url + "\n")
+    logger.info("Saved %d sources to sources.txt", len(sources))

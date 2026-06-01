@@ -1,0 +1,3 @@
+https://raw.githubusercontent.com/ShadowException/VPN/refs/heads/main/configs/VPN-cat
+https://raw.githubusercontent.com/Ai123999/1Mond/refs/heads/main/1Mond_Notorgamers
+https://internet-tenshi.kangel.tech/whitelist

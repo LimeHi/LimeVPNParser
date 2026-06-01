@@ -191,6 +191,7 @@ async def cmd_add(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text("ℹ️ Этот источник уже добавлен.")
         return
     src.sources.append(url)
+    src.save_sources()
     await update.message.reply_text(
         f"✅ Добавлен источник #{len(src.sources)}:\n`{url}`", parse_mode="Markdown"
     )
@@ -204,6 +205,7 @@ async def cmd_remove(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     try:
         idx     = int(ctx.args[0]) - 1
         removed = src.sources.pop(idx)
+        src.save_sources()
         await update.message.reply_text(
             f"🗑 Удалён источник:\n`{removed}`", parse_mode="Markdown"
         )
@@ -213,7 +215,7 @@ async def cmd_remove(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
 
 @_admin_only
 async def cmd_reset_sources(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
-    src.sources[:] = list(DEFAULT_SOURCES)
+    src.sources[:] = src.load_sources()
     await update.message.reply_text(f"♻️ Источники сброшены. Активных: {len(src.sources)}")
 
 
