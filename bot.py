@@ -35,15 +35,14 @@ from state import state
 
 logger = logging.getLogger(__name__)
 
-# ── Планировщик (хранится здесь для управления из бота) ──────────────────────
-_scheduler_task: asyncio.Task | None = None
 _scheduler_running = False
+_scheduler_task = None
+_event_loop = None   # сохраняем event loop для вызовов из потоков
 
 
 # ── Хелперы ───────────────────────────────────────────────────────────────────
 
 def _admin_only(func):
-    """Декоратор: только TELEGRAM_ADMIN_ID."""
     async def wrapper(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
         if update.effective_user and update.effective_user.id != cfg.TELEGRAM_ADMIN_ID:
             await update.message.reply_text("⛔ Нет доступа")
@@ -56,10 +55,11 @@ def _admin_only(func):
 def _run_pipeline_thread(app: Application) -> None:
     """Запускает pipeline в отдельном потоке, уведомляет через бот."""
     def _notify(msg: str):
-        asyncio.run_coroutine_threadsafe(
-            app.bot.send_message(chat_id=cfg.TELEGRAM_ADMIN_ID, text=msg),
-            app.loop,
-        )
+        if _event_loop and not _event_loop.is_closed():
+            asyncio.run_coroutine_threadsafe(
+                app.bot.send_message(chat_id=cfg.TELEGRAM_ADMIN_ID, text=msg),
+                _event_loop,
+            )
 
     thread = threading.Thread(target=run_pipeline, args=(_notify,), daemon=True)
     thread.start()
@@ -88,13 +88,11 @@ async def cmd_start(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
 
 @_admin_only
 async def cmd_status(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
-    global _scheduler_running
     s = state
-
-    last_run = s.last_run.strftime("%Y-%m-%d %H:%M:%S") if s.last_run else "никогда"
+    last_run    = s.last_run.strftime("%Y-%m-%d %H:%M:%S") if s.last_run else "никогда"
     status_icon = "🟢" if s.last_ok else "🔴"
-    running_str  = "⚙️ Выполняется..." if s.is_running else "💤 Ожидает"
-    sched_str    = "✅ Активен" if _scheduler_running else "⛔ Остановлен"
+    running_str = "⚙️ Выполняется..." if s.is_running else "💤 Ожидает"
+    sched_str   = "✅ Активен" if _scheduler_running else "⛔ Остановлен"
 
     lines = [
         "📊 *Статус парсера*",
@@ -110,12 +108,14 @@ async def cmd_status(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
         "",
         f"📁 Источников: `{len(src.sources)}`",
         f"🔗 Репозиторий: `{cfg.GITHUB_REPO}`",
-        f"⏱ Интервал обновления: каждые {cfg.UPDATE_INTERVAL_HOURS}ч",
+        f"⏱ Интервал: каждые {cfg.UPDATE_INTERVAL_HOURS}ч",
     ]
 
     if s.is_running and s.progress_total > 0:
         pct = s.progress_done * 100 // s.progress_total
-        lines.append(f"\n🔄 Прогресс: {s.progress_done}/{s.progress_total} ({pct}%) [{s.progress_stage}]")
+        lines.append(
+            f"\n🔄 Прогресс: {s.progress_done}/{s.progress_total} ({pct}%) [{s.progress_stage}]"
+        )
 
     await update.message.reply_text("\n".join(lines), parse_mode="Markdown")
 
@@ -131,7 +131,7 @@ async def cmd_run(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
 
 @_admin_only
 async def cmd_stop(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
-    global _scheduler_task, _scheduler_running
+    global _scheduler_running, _scheduler_task
     _scheduler_running = False
     if _scheduler_task and not _scheduler_task.done():
         _scheduler_task.cancel()
@@ -145,7 +145,7 @@ async def cmd_resume(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text("ℹ️ Планировщик уже работает.")
         return
     _scheduler_running = True
-    _schedule_loop(ctx.application)
+    _start_scheduler(ctx.application)
     await update.message.reply_text(
         f"✅ Планировщик запущен. Обновление каждые {cfg.UPDATE_INTERVAL_HOURS}ч."
     )
@@ -163,9 +163,10 @@ async def cmd_logs(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     if not logs:
         await update.message.reply_text("📭 Лог пуст")
         return
-    # Разбиваем на части если слишком длинно
     for i in range(0, len(logs), 4000):
-        await update.message.reply_text(f"```\n{logs[i:i+4000]}\n```", parse_mode="Markdown")
+        await update.message.reply_text(
+            f"```\n{logs[i:i+4000]}\n```", parse_mode="Markdown"
+        )
 
 
 @_admin_only
@@ -190,8 +191,9 @@ async def cmd_add(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text("ℹ️ Этот источник уже добавлен.")
         return
     src.sources.append(url)
-    await update.message.reply_text(f"✅ Добавлен источник #{len(src.sources)}:\n`{url}`",
-                                    parse_mode="Markdown")
+    await update.message.reply_text(
+        f"✅ Добавлен источник #{len(src.sources)}:\n`{url}`", parse_mode="Markdown"
+    )
 
 
 @_admin_only
@@ -200,10 +202,11 @@ async def cmd_remove(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text("⚠️ Укажи номер: /remove <N>")
         return
     try:
-        idx = int(ctx.args[0]) - 1
+        idx     = int(ctx.args[0]) - 1
         removed = src.sources.pop(idx)
-        await update.message.reply_text(f"🗑 Удалён источник:\n`{removed}`",
-                                        parse_mode="Markdown")
+        await update.message.reply_text(
+            f"🗑 Удалён источник:\n`{removed}`", parse_mode="Markdown"
+        )
     except (ValueError, IndexError):
         await update.message.reply_text("❌ Неверный номер источника")
 
@@ -231,10 +234,10 @@ async def cmd_settings(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text("\n".join(lines), parse_mode="Markdown")
 
 
-# ── Планировщик (asyncio) ──────────────────────────────────────────────────────
+# ── Планировщик ───────────────────────────────────────────────────────────────
 
-def _schedule_loop(app: Application) -> None:
-    global _scheduler_task, _scheduler_running
+def _start_scheduler(app: Application) -> None:
+    global _scheduler_task
 
     async def _loop():
         global _scheduler_running
@@ -246,16 +249,13 @@ def _schedule_loop(app: Application) -> None:
             logger.info("Scheduler: starting scheduled run")
             _run_pipeline_thread(app)
 
-    loop = app.loop
-    _scheduler_task = asyncio.run_coroutine_threadsafe(_loop(), loop)
+    _scheduler_task = asyncio.ensure_future(_loop())
 
 
-# ── Сборка приложения ─────────────────────────────────────────────────────────
+# ── Сборка и запуск ───────────────────────────────────────────────────────────
 
 def build_app() -> Application:
-    global _scheduler_running
     app = Application.builder().token(cfg.TELEGRAM_BOT_TOKEN).build()
-
     app.add_handler(CommandHandler("start",         cmd_start))
     app.add_handler(CommandHandler("status",        cmd_status))
     app.add_handler(CommandHandler("run",           cmd_run))
@@ -267,22 +267,20 @@ def build_app() -> Application:
     app.add_handler(CommandHandler("remove",        cmd_remove))
     app.add_handler(CommandHandler("reset_sources", cmd_reset_sources))
     app.add_handler(CommandHandler("settings",      cmd_settings))
-
     return app
 
 
 def start_bot_with_scheduler() -> None:
-    """Запускает бота и активирует планировщик после старта."""
-    global _scheduler_running
+    global _scheduler_running, _event_loop
 
     app = build_app()
 
     async def _post_init(application: Application) -> None:
-        global _scheduler_running
+        global _scheduler_running, _event_loop
+        _event_loop        = asyncio.get_event_loop()
         _scheduler_running = True
-        _schedule_loop(application)
+        _start_scheduler(application)
         logger.info("Scheduler started: every %dh", cfg.UPDATE_INTERVAL_HOURS)
-        # Уведомим администратора
         try:
             await application.bot.send_message(
                 chat_id=cfg.TELEGRAM_ADMIN_ID,
@@ -290,10 +288,10 @@ def start_bot_with_scheduler() -> None:
                     "🤖 Бот запущен!\n"
                     f"Планировщик активен: обновление каждые {cfg.UPDATE_INTERVAL_HOURS}ч\n"
                     "Используй /run для запуска вручную"
-                )
+                ),
             )
-        except Exception:
-            pass
+        except Exception as e:
+            logger.warning("Could not send startup message: %s", e)
 
     app.post_init = _post_init
     logger.info("Starting Telegram bot polling…")
