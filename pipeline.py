@@ -68,7 +68,19 @@ def run_pipeline(notify_cb=None) -> bool:
 
         results = check_all(all_uris, max_workers=cfg.MAX_WORKERS, progress_cb=_progress)
 
-        working_uris = [r.uri for r in results if r.ok][:cfg.MAX_CONFIGS]
+        good_results = [r for r in results if r.ok]
+
+        # ── Фильтр по латентности (тайм-аут) ─────────────────────────────
+        if cfg.MAX_LATENCY_MS > 0:
+            before_filter = len(good_results)
+            good_results = [r for r in good_results if r.latency <= cfg.MAX_LATENCY_MS]
+            dropped = before_filter - len(good_results)
+            if dropped:
+                _notify(
+                    f"⏱ Отброшено по высокому пингу (>{cfg.MAX_LATENCY_MS} ms): {dropped} конфигов"
+                )
+
+        working_uris = [r.uri for r in good_results][:cfg.MAX_CONFIGS]
         state.total_checked = len(all_uris)
         state.total_working = len(working_uris)
 

@@ -13,6 +13,7 @@ bot.py  –  Telegram-бот для управления парсером.
   /remove <N>     – удалить источник по номеру
   /reset_sources  – вернуть источники по умолчанию
   /settings       – текущие настройки
+  /set_max_latency [ms] – порог пинга (конфиги выше удаляются; 0 = откл.)
 """
 
 import asyncio
@@ -220,6 +221,7 @@ async def cmd_reset_sources(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
 
 @_admin_only
 async def cmd_settings(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
+    lat_label = f"`{cfg.MAX_LATENCY_MS} ms`" if cfg.MAX_LATENCY_MS > 0 else "`отключён`"
     lines = [
         "⚙️ *Настройки*",
         "",
@@ -228,11 +230,43 @@ async def cmd_settings(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
         f"Макс. конфигов: `{cfg.MAX_CONFIGS}`",
         f"Параллельных воркеров: `{cfg.MAX_WORKERS}`",
         f"Таймаут проверки: `{cfg.CHECK_TIMEOUT}s`",
+        f"Макс. пинг (фильтр): {lat_label}",
         f"Интервал: `{cfg.UPDATE_INTERVAL_HOURS}h`",
         f"Тэг канала: `{cfg.CHANNEL_TAG}`",
         f"Xray: `{cfg.XRAY_PATH}`",
     ]
     await update.message.reply_text("\n".join(lines), parse_mode="Markdown")
+
+
+@_admin_only
+async def cmd_set_max_latency(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
+    """
+    /set_max_latency <ms>   – установить порог пинга (конфиги выше удаляются)
+    /set_max_latency 0      – отключить фильтр
+    """
+    args = ctx.args
+    if not args or not args[0].isdigit():
+        current = f"{cfg.MAX_LATENCY_MS} ms" if cfg.MAX_LATENCY_MS > 0 else "отключён"
+        await update.message.reply_text(
+            f"ℹ️ Текущий порог пинга: *{current}*\n\n"
+            "Использование: `/set_max_latency <ms>`\n"
+            "Пример: `/set_max_latency 2000` — удалять конфиги с пингом > 2 сек\n"
+            "Чтобы отключить фильтр: `/set_max_latency 0`",
+            parse_mode="Markdown",
+        )
+        return
+
+    value = int(args[0])
+    cfg.MAX_LATENCY_MS = value
+
+    if value == 0:
+        await update.message.reply_text("✅ Фильтр по пингу *отключён*", parse_mode="Markdown")
+    else:
+        await update.message.reply_text(
+            f"✅ Порог пинга установлен: *{value} ms*\n"
+            f"Конфиги с пингом выше будут удаляться при следующем запуске.",
+            parse_mode="Markdown",
+        )
 
 
 # ── Планировщик ───────────────────────────────────────────────────────────────
@@ -266,8 +300,9 @@ def build_app() -> Application:
     app.add_handler(CommandHandler("sources",       cmd_sources))
     app.add_handler(CommandHandler("add",           cmd_add))
     app.add_handler(CommandHandler("remove",        cmd_remove))
-    app.add_handler(CommandHandler("reset_sources", cmd_reset_sources))
-    app.add_handler(CommandHandler("settings",      cmd_settings))
+    app.add_handler(CommandHandler("reset_sources",    cmd_reset_sources))
+    app.add_handler(CommandHandler("settings",         cmd_settings))
+    app.add_handler(CommandHandler("set_max_latency",  cmd_set_max_latency))
     return app
 
 
