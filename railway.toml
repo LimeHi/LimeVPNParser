@@ -1,0 +1,20 @@
+[build]
+builder = "dockerfile"
+dockerfilePath = "Dockerfile"
+
+[deploy]
+startCommand = "python main.py"
+restartPolicyType = "on_failure"
+restartPolicyMaxRetries = 5
+
+# Переменные окружения задаются в Railway Dashboard → Variables
+# TELEGRAM_BOT_TOKEN
+# TELEGRAM_ADMIN_ID
+# GITHUB_TOKEN
+# GITHUB_REPO          (username/repo-name)
+# GITHUB_BRANCH        (main)
+# UPDATE_INTERVAL_HOURS (6)
+# MAX_CONFIGS          (100)
+# MAX_WORKERS          (30)
+# CHECK_TIMEOUT        (8)
+# CHANNEL_TAG          (@YourChannel)
