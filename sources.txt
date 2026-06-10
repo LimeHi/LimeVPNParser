@@ -1,3 +1,5 @@
-https://raw.githubusercontent.com/ShadowException/VPN/refs/heads/main/configs/VPN-cat
-https://raw.githubusercontent.com/Ai123999/1Mond/refs/heads/main/1Mond_Notorgamers
-https://internet-tenshi.kangel.tech/whitelist
+https://etoneya.su/other
+https://etoneya.su/whitelist
+https://wlrus.lol/confs/selected.txt
+https://raw.githubusercontent.com/AirLinkVPN1/AirLinkVPN/refs/heads/main/rkn_white_list
+https://rostunnel.vercel.app/mega.txt
