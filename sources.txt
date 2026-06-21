@@ -1,5 +1,2 @@
-https://etoneya.su/other
-https://etoneya.su/whitelist
-https://wlrus.lol/confs/selected.txt
-https://raw.githubusercontent.com/AirLinkVPN1/AirLinkVPN/refs/heads/main/rkn_white_list
-https://rostunnel.vercel.app/mega.txt
+https://raw.githack.com/igareck/vpn-configs-for-russia/main/BLACK_VLESS_RUS_mobile.txt
+https://raw.githack.com/igareck/vpn-configs-for-russia/main/Vless-Reality-White-Lists-Rus-Mobile.txt
